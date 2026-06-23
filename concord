@@ -62,5 +62,4 @@ main() {
         #tput rc
         encrypt_msg "$key" "${username}: $usr_input" >&"${COPROC[1]}"
     done
-}
-main "$@"
+}; main "$@"
