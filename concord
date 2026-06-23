@@ -1,11 +1,30 @@
 #!/usr/bin/env bash
 set -e
 
-trap cleanup SIGINT EXIT SIGKILL
+trap cleanup SIGINT EXIT
+
+ROWS=$(tput lines)
+COLS=$(tput cols)
+CONTENT_ROWS=$((ROWS - 1))
+OLD_STTY=$(stty -g)
+LEAVE=1
 
 cleanup() {
-    printf "\e[r"
-    tput cup $((LINES )) 0
+    if [[ $LEAVE < 1 ]]; then
+        # leave message
+        send_msg "$key" "${username}: has left"
+    fi
+    LEAVE=$((LEAVE - 1))
+
+    printf "\033[r"      # reset scroll region
+    tput rmcup           # restore original screen
+    stty "$OLD_STTY"
+
+    #echo "cleanup" $nfty_listen_PID
+    if kill -0 $CURL_PID 2>/dev/null; then
+        #echo "cleanup" "$CURL_PID"
+        kill ${CURL_PID}
+    fi
     exit
 }
 
@@ -14,27 +33,33 @@ encrypt_msg() {
     local msg="$1"
     #echo "$msg" | openssl enc -aes-256-cbc -pbkdf2 -base64 -nosalt -k "$key"
     echo "$msg" | gpg --passphrase "$key" --batch --yes --symmetric -a
-    echo '^'
 }
 
 decrypt_msg() {
     local key="$1"; shift
-    local msg
-    while IFS= read -r -d '^' msg; do
+    local msg="$@"
         #echo "$msg" #| openssl enc -d -aes-256-cbc -pbkdf2 -base64 -nosalt -k "$key"
         gpg --decrypt --passphrase "$key" --batch --yes --quiet <<< "$msg"
-        echo
-    done
 }
 
 show_msg() {
     local read_fd="$1"; shift
     local msg
-    while read -r -u $read_fd msg; do
-        tput cup $((LINES - 2)) 0
-        echo "$msg"
-        tput cup $((LINES - 1)) 0
+    while IFS= read -r -u $read_fd msg; do
+        #tput cup $((LINES - 2)) 0
+        if [[ -n "$msg" ]]; then
+            tput sc
+            tput cup $((${CONTENT_ROWS} - 1))  0
+            echo "$msg"
+            tput rc
+            tput cr
+        fi
+        #tput cup $((LINES - 1)) 0
     done
+}
+
+send_msg() {
+    echo "$@" | curl -s -d @- "ntfy.sh/0xDEADBEA7" >/dev/null
 }
 
 random_name() {
@@ -42,7 +67,7 @@ random_name() {
     local consonants=( b c d f g h j k l m n p q r s t v w x y z);
     local result=
 
-    while ((${#result} == 0)); do
+    while ((${#result} < 4)); do
 
         #local limit=5
         #for ((i = 0; i < limit; ++i)); do
@@ -73,37 +98,67 @@ random_name() {
 }
 
 preflight() {
-    local requires=( gpg jqi curl)
+    #local requires=( curl )
+    if ! [[ "$BASH_VERSION" =~ ^5.+ ]]; then
+        echo "Needs a newer version of Bash"
+        exit 1
+    fi
+}
+
+draw_input() {
+    tput cup $((ROWS - 1)) 0
+    printf "\033[2K"  # clear the line
+    printf "> %s" "$@"
+}
+
+print_message() {
+    # Save cursor, move to top region, print (it will scroll naturally), restore
+    tput sc
+    tput cup ${CONTENT_ROWS}  0
+    echo "$@"
+    tput rc
 }
 
 main() {
-    local username="${1}"
-    local key="${2:-0xDEADBEA7}"
+    username="${1}"
+    key="${2:-0xDEADBEA7}"
     if [[ -z $username ]]; then
         username="$(random_name)"
     fi
-    LINES=$(tput lines)
-    COLS=$(tput cols)
 
     preflight
 
-    printf "\e[1;$((LINES -1))r"
-    tput cup $((LINES - 2)) 0
-    echo
-    tput cup $((LINES )) 0
+    tput smcup
+    tput clear
+    printf "\033[1;${CONTENT_ROWS}r"
 
-    coproc decrypt_msg "$key"
-    exec {READ_FD}<&${COPROC[0]}-
+    echo "To exit use CTRL+c"
+
+    coproc ntfy_listen ( curl -s --no-buffer -N "ntfy.sh/0xDEADBEA7/raw" )
+    CURL_PID=$ntfy_listen_PID
+    exec {READ_FD}<&${ntfy_listen[0]}
     show_msg $READ_FD &
 
-    local usr_input
-    while read -re usr_input; do
-        #tput sc
-        #tput cuu1
-        tput dl1
-        #tput cuu1
-        #tput el
-        #tput rc
-        encrypt_msg "$key" "${username}: $usr_input" >&"${COPROC[1]}"
+    # arrival message
+    send_msg "$key" "${username}: has arrived"
+
+    local usr_input=""
+    local char
+    draw_input
+    while IFS= read -r -s -n1 char; do
+        if [[ -z "$char" ]]; then
+            if [[ -n "$usr_input" ]]; then
+                send_msg "$key" "${username}: $usr_input"
+                usr_input=""
+            fi
+        elif [[ $char == $'\177' ]]; then  # backspace
+            usr_input="${usr_input%?}"
+        else
+            usr_input+="$char"
+        fi
+        draw_input "$usr_input"
     done
+
+
+    wait
 }; main "$@"
