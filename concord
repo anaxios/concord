@@ -37,11 +37,55 @@ show_msg() {
     done
 }
 
+random_name() {
+    local vowels=( a e i o u y );
+    local consonants=( b c d f g h j k l m n p q r s t v w x y z);
+    local result=
+
+    while ((${#result} == 0)); do
+
+        #local limit=5
+        #for ((i = 0; i < limit; ++i)); do
+            if [[ $(($RANDOM % 2)) == 0 ]]; then
+                local rndc=$(($RANDOM % ${#consonants[@]}))
+                local rndv=$(($RANDOM % ${#vowels[@]}))
+                local tmp="${consonants[rndc]}${vowels[rndv]}"
+                result="$result$tmp"
+            fi
+            if [[ $(($RANDOM % 2)) == 0 ]]; then
+                local rndc=$(($RANDOM % ${#consonants[@]}))
+                local rndcc=$(($RANDOM % ${#consonants[@]}))
+                local rndv=$(($RANDOM % ${#vowels[@]}))
+                local tmp="${consonants[rndc]}${vowels[rndv]}${consonants[rndcc]}"
+                result="$result$tmp"
+            fi
+            if [[ $(($RANDOM % 2)) == 0 ]]; then
+                local rndc=$(($RANDOM % ${#consonants[@]}))
+                local rndcc=$(($RANDOM % ${#consonants[@]}))
+                local rndv=$(($RANDOM % ${#vowels[@]}))
+                local tmp="${vowels[rndv]}${consonants[rndcc]}"
+                result="$result$tmp"
+            fi
+        #done
+    done
+
+    echo "$result"
+}
+
+preflight() {
+    local requires=( gpg jqi curl)
+}
+
 main() {
-    local key="$1"; shift
-    local username="${1:-anon}"
+    local username="${1}"
+    local key="${2:-0xDEADBEA7}"
+    if [[ -z $username ]]; then
+        username="$(random_name)"
+    fi
     LINES=$(tput lines)
     COLS=$(tput cols)
+
+    preflight
 
     printf "\e[1;$((LINES -1))r"
     tput cup $((LINES - 2)) 0
