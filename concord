@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -e
+
+trap cleanup SIGINT EXIT SIGKILL
+
+cleanup() {
+    printf "\e[r"
+    tput cup $((LINES )) 0
+    exit
+}
+
+encrypt_msg() {
+    local key="$1"; shift
+    local msg="$1"
+    #echo "$msg" | openssl enc -aes-256-cbc -pbkdf2 -base64 -nosalt -k "$key"
+    echo "$msg" | gpg --passphrase "$key" --batch --yes --symmetric -a
+    echo '^'
+}
+
+decrypt_msg() {
+    local key="$1"; shift
+    local msg
+    while IFS= read -r -d '^' msg; do
+        #echo "$msg" #| openssl enc -d -aes-256-cbc -pbkdf2 -base64 -nosalt -k "$key"
+        gpg --decrypt --passphrase "$key" --batch --yes --quiet <<< "$msg"
+        echo
+    done
+}
+
+show_msg() {
+    local read_fd="$1"; shift
+    local msg
+    while read -r -u $read_fd msg; do
+        tput cup $((LINES - 2)) 0
+        echo "$msg"
+        tput cup $((LINES - 1)) 0
+    done
+}
+
+main() {
+    local key="$1"; shift
+    local username="${1:-anon}"
+    LINES=$(tput lines)
+    COLS=$(tput cols)
+
+    printf "\e[1;$((LINES -1))r"
+    tput cup $((LINES - 2)) 0
+    echo
+    tput cup $((LINES )) 0
+
+    coproc decrypt_msg "$key"
+    exec {READ_FD}<&${COPROC[0]}-
+    show_msg $READ_FD &
+
+    local usr_input
+    while read -re usr_input; do
+        #tput sc
+        #tput cuu1
+        tput dl1
+        #tput cuu1
+        #tput el
+        #tput rc
+        encrypt_msg "$key" "${username}: $usr_input" >&"${COPROC[1]}"
+    done
+}
+main "$@"
