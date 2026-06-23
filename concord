@@ -59,6 +59,7 @@ show_msg() {
 }
 
 send_msg() {
+    shift
     echo "$@" | curl -s -d @- "ntfy.sh/0xDEADBEA7" >/dev/null
 }
 
