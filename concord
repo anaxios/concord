@@ -2,14 +2,17 @@
 set -e
 
 trap cleanup SIGINT EXIT
+#trap handle_resize SIGWINCH
 
 ROWS=$(tput lines)
 COLS=$(tput cols)
 CONTENT_ROWS=$((ROWS - 1))
 OLD_STTY=$(stty -g)
 LEAVE=1
+SERVER='https://ntfy.daedalist.net/'
 
 cleanup() {
+    #wait
     if [[ $LEAVE < 1 ]]; then
         # leave message
         send_msg "$key" "${username}: has left"
@@ -28,39 +31,12 @@ cleanup() {
     exit
 }
 
-encrypt_msg() {
-    local key="$1"; shift
-    local msg="$1"
-    #echo "$msg" | openssl enc -aes-256-cbc -pbkdf2 -base64 -nosalt -k "$key"
-    echo "$msg" | gpg --passphrase "$key" --batch --yes --symmetric -a
-}
-
-decrypt_msg() {
-    local key="$1"; shift
-    local msg="$@"
-        #echo "$msg" #| openssl enc -d -aes-256-cbc -pbkdf2 -base64 -nosalt -k "$key"
-        gpg --decrypt --passphrase "$key" --batch --yes --quiet <<< "$msg"
-}
-
-show_msg() {
-    local read_fd="$1"; shift
-    local msg
-    while IFS= read -r -u $read_fd msg; do
-        #tput cup $((LINES - 2)) 0
-        if [[ -n "$msg" ]]; then
-            tput sc
-            tput cup $((${CONTENT_ROWS} - 1))  0
-            echo "$msg"
-            tput rc
-            tput cr
-        fi
-        #tput cup $((LINES - 1)) 0
-    done
-}
-
-send_msg() {
-    shift
-    echo "$@" | curl -s -d @- "ntfy.sh/0xDEADBEA7" >/dev/null
+preflight() {
+    #local requires=( curl )
+    if ! [[ "$BASH_VERSION" =~ ^5.+ ]]; then
+        echo "Needs a newer version of Bash"
+        exit 1
+    fi
 }
 
 random_name() {
@@ -98,26 +74,99 @@ random_name() {
     echo "$result"
 }
 
-preflight() {
-    #local requires=( curl )
-    if ! [[ "$BASH_VERSION" =~ ^5.+ ]]; then
-        echo "Needs a newer version of Bash"
-        exit 1
+encrypt_msg() {
+    local key="$1"; shift
+    local msg="$1"
+    #echo "$msg" | openssl enc -aes-256-cbc -pbkdf2 -base64 -nosalt -k "$key"
+    echo "$msg" | gpg --passphrase "$key" --batch --yes --symmetric -a
+}
+
+decrypt_msg() {
+    local key="$1"; shift
+    local msg="$@"
+        #echo "$msg" #| openssl enc -d -aes-256-cbc -pbkdf2 -base64 -nosalt -k "$key"
+        gpg --decrypt --passphrase "$key" --batch --yes --quiet <<< "$msg"
+}
+
+MESSAGE_BUFFER_OFFSET=0
+SCROLLBACK_OFFSET=0
+MESSAGE_BUFFER=()
+draw_messages() {
+    local read_fd="$1"; shift
+    local msg
+
+    #MESSAGE_BUFFER_OFFSET=$((${#MESSAGE_BUFFER[@]} - $CONTENT_ROWS))
+    #MESSAGE_BUFFER_OFFSET=${#MESSAGE_BUFFER[@]}
+    while IFS= read -r -u $read_fd msg; do
+        local MESSAGE_BUFFER_LEN=${#MESSAGE_BUFFER[@]}
+        MESSAGE_BUFFER_OFFSET=$(max 0 $(( $MESSAGE_BUFFER_LEN - $CONTENT_ROWS + 1)))
+        #tput cup $((LINES - 2)) 0
+        if [[ -n "$msg" ]]; then
+            MESSAGE_BUFFER+=( "$msg" )
+            tput sc
+            tput civis
+            for ((i = 0; i < CONTENT_ROWS; ++i)); do
+                tput cup $(($i))  0
+                printf "\033[2K"  # clear the line
+                echo -n "${MESSAGE_BUFFER[MESSAGE_BUFFER_OFFSET + i]}"
+                #echo -n "${MESSAGE_BUFFER_LEN}"
+            done
+            tput rc
+            #tput cr
+            tput cup $((LINES - 1)) 2
+            tput cnorm
+        fi
+    done
+}
+
+send_msg() {
+    local key="$1"; shift
+    echo "$@" | curl -s -d @- "${SERVER}/${key}" >/dev/null
+}
+
+#print_message() {
+#    # Save cursor, move to top region, print (it will scroll naturally), restore
+#    tput sc
+#    tput cup ${CONTENT_ROWS}  0
+#    echo "$@"
+#    tput rc
+#}
+
+handle_resize() {
+    ROWS=$(tput lines)
+    COLS=$(tput cols)
+    CONTENT_ROWS=$((ROWS - 1))
+    tput smcup
+    tput clear
+    printf "\033[1;${CONTENT_ROWS}r"  # reset scroll region
+    #draw_input "$usr_input"
+}
+
+max() {
+    local x=$1; shift
+    local y=$1
+    if [[ $x -lt $y ]]; then
+        echo $y
+    else
+        echo $x
     fi
 }
 
 draw_input() {
+    IFS=
+    local text="$1"
+    local pos="${2:-${#text}}"
+    local cols=$(($COLS - 3))
     tput cup $((ROWS - 1)) 0
     printf "\033[2K"  # clear the line
-    printf "> %s" "$@"
-}
-
-print_message() {
-    # Save cursor, move to top region, print (it will scroll naturally), restore
-    tput sc
-    tput cup ${CONTENT_ROWS}  0
-    echo "$@"
-    tput rc
+    #if [[ $pos -ge $cols ]]; then
+        local min=$(max 0 $(($pos - $cols)))
+        printf "> %s" "${text:$min:$cols}"
+        tput cup $((ROWS - 1)) $((pos + 2))
+    #else
+    #    printf "> %s" "$text"
+    #    tput cup $((ROWS - 1)) $((pos + 2))
+    #fi
 }
 
 main() {
@@ -131,35 +180,67 @@ main() {
 
     tput smcup
     tput clear
-    printf "\033[1;${CONTENT_ROWS}r"
+    #printf "\033[1;${CONTENT_ROWS}r"
 
     echo "To exit use CTRL+c"
 
-    coproc ntfy_listen ( curl -s --no-buffer -N "ntfy.sh/0xDEADBEA7/raw" )
+    coproc ntfy_listen ( curl -s --no-buffer -N "${SERVER}/${key}/raw?since=720m" )
+    #coproc ntfy_listen ( cat )
     CURL_PID=$ntfy_listen_PID
     exec {READ_FD}<&${ntfy_listen[0]}
-    show_msg $READ_FD &
+    draw_messages $READ_FD &
 
-    # arrival message
+    ## arrival message
     send_msg "$key" "${username}: has arrived"
 
-    local usr_input=""
+    local usr_input=( )
+    local cur_pos=0
     local char
+    local esc
     draw_input
     while IFS= read -r -s -n1 char; do
         if [[ -z "$char" ]]; then
-            if [[ -n "$usr_input" ]]; then
-                send_msg "$key" "${username}: $usr_input"
-                usr_input=""
+            if [[ -n "${#usr_input[@]}" ]]; then
+                send_msg "$key" "${username}: ${usr_input[*]}"
+                #echo "$key" "${username}: ${usr_input[*]}" >&${ntfy_listen[1]}
+                cur_pos=0
+                usr_input=()
             fi
         elif [[ $char == $'\177' ]]; then  # backspace
-            usr_input="${usr_input%?}"
+            local usr_input_len=${#usr_input[@]}
+            (( cur_pos == 0 )) && continue || true
+            (( cur_pos > 0 )) && (( cur_pos-- )) || true
+            for ((i = cur_pos; i <= usr_input_len; ++i )); do
+                usr_input[i]="${usr_input[i+1]}"
+            done
+            unset usr_input[usr_input_len - 1]
+            usr_input=( ${usr_input[@]} )
+        elif [[ $char == $'\033' ]]; then # escape sequences
+            #cur_pos=${#usr_input}
+            read -r -s -n5 -t 0.05 esc || true  # consume up to 5 more bytes
+            case "$esc" in
+                '[D')  # left arrow
+                    (( cur_pos > 0 )) && (( cur_pos-- )) || true
+                    ;;
+                '[C')  # right arrow
+                    (( cur_pos < ${#usr_input[@]} )) && (( cur_pos++ )) || true
+                        ;;
+                    *)  # discard other sequences
+                        ;;
+                esac
+            #draw_input "$usr_input"
+            #draw_input "$usr_input" "$cur_pos"
+            #continue
         else
-            usr_input+="$char"
+            #copy forward
+            usr_input_len=${#usr_input[@]}
+            for ((i = usr_input_len - 1; i >= cur_pos; --i )); do
+                usr_input[i+1]="${usr_input[i]}"
+            done
+            usr_input[cur_pos++]="$char"
         fi
-        draw_input "$usr_input"
+    draw_input "${usr_input[*]}" "$cur_pos"
     done
 
 
-    wait
 }; main "$@"
