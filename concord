@@ -4,11 +4,11 @@
 trap cleanup INT SIGINT EXIT
 trap handle_resize SIGWINCH
 
-ROWS=$(tput lines)
-COLS=$(tput cols)
+ROWS=${ tput lines; }
+COLS=${ tput cols; }
 SCROLL=0
 CONTENT_ROWS=$((ROWS - 1))
-OLD_STTY=$(stty -g)
+OLD_STTY=${ stty -g; }
 SERVER='https://ntfy.daedalist.net/'
 
 LEAVE=1
@@ -204,12 +204,9 @@ send_msg() {
 }
 
 handle_resize() {
-    ROWS=$(tput lines)
-    COLS=$(tput cols)
+    ROWS=${ tput lines; }
+    COLS=${ tput cols; }
     CONTENT_ROWS=$((ROWS - 1))
-    #tput smcup
-    #tput clear
-    #printf "\033[1;${CONTENT_ROWS}r"  # reset scroll region
     render_messages
     render_messages
     draw_input
@@ -239,7 +236,8 @@ draw_input() {
     #tput civis
     tput cup $((ROWS - 1)) 0
     #printf "\033[2K"  # clear the line
-    local min=$(max 0 $(($pos - $cols)))
+    local min=${ max 0 $(($pos - $cols)); }
+    # go to beginning of line print test then clear the rest of the line
     printf "\r%s\033[K" "> ${text:$min:$cols}"
     tput cup $((ROWS - 1)) $((pos + 2)) # real cursor is hidden here
     printf "\033[7m${text:$((pos)):1}\033[0m" # invert cursor
@@ -277,10 +275,7 @@ input_handler() {
             usr_input=( "${input[@]}" )
 
         elif [[ $char == $'\033' ]]; then # escape sequences
-            local one two three four five
             read -r -s -n5 -t 0.01 esc || true  # consume up to 5 more bytes
-            #read -r -s -n5 one two three four five || true  # consume up to 5 more bytes
-            #esc="$one$two$three$four$five"
             case "$esc" in
                 '[A')  # up arrow
                     write "CTRL_KEYS: UP"
@@ -316,11 +311,11 @@ test_events() {
 }
 
 write() {
-    echo "$@" > /tmp/EVENT_BUS
+    echo "$*" > /tmp/EVENT_BUS
 }
 
 test_log() {
-    echo "$@" > /dev/ttys002
+    echo "$*" > /dev/ttys002
 }
 
 main() {
