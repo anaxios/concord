@@ -51,29 +51,32 @@ preflight() {
 random_name() {
     local vowels=( a e i o u y );
     local consonants=( b c d f g h j k l m n p q r s t v w x y z);
-    local result=
+    local rejects=( yy xy qx xq pq wq )
+    local result
 
     while ((${#result} < 4)); do
+        local rndc rndv rndcc tmp
         if [[ $(($RANDOM % 2)) == 0 ]]; then
-            local rndc=$(($RANDOM % ${#consonants[@]}))
-            local rndv=$(($RANDOM % ${#vowels[@]}))
-            local tmp="${consonants[rndc]}${vowels[rndv]}"
-            result="$result$tmp"
+            rndc=$(($RANDOM % ${#consonants[@]}))
+            rndv=$(($RANDOM % ${#vowels[@]}))
+            tmp="${consonants[rndc]}${vowels[rndv]}"
         fi
         if [[ $(($RANDOM % 2)) == 0 ]]; then
-            local rndc=$(($RANDOM % ${#consonants[@]}))
-            local rndcc=$(($RANDOM % ${#consonants[@]}))
-            local rndv=$(($RANDOM % ${#vowels[@]}))
-            local tmp="${consonants[rndc]}${vowels[rndv]}${consonants[rndcc]}"
-            result="$result$tmp"
+            rndc=$(($RANDOM % ${#consonants[@]}))
+            rndcc=$(($RANDOM % ${#consonants[@]}))
+            rndv=$(($RANDOM % ${#vowels[@]}))
+            tmp="${consonants[rndc]}${vowels[rndv]}${consonants[rndcc]}"
         fi
         if [[ $(($RANDOM % 2)) == 0 ]]; then
-            local rndc=$(($RANDOM % ${#consonants[@]}))
-            local rndcc=$(($RANDOM % ${#consonants[@]}))
-            local rndv=$(($RANDOM % ${#vowels[@]}))
-            local tmp="${vowels[rndv]}${consonants[rndcc]}"
-            result="$result$tmp"
+            rndc=$(($RANDOM % ${#consonants[@]}))
+            rndcc=$(($RANDOM % ${#consonants[@]}))
+            rndv=$(($RANDOM % ${#vowels[@]}))
+            tmp="${vowels[rndv]}${consonants[rndcc]}"
         fi
+        #if [[ "${rejects[*]}" =~ "$tmp" ]]; then
+        #    tmp=''
+        #fi
+        result="$result$tmp"
     done
 
     echo "$result"
@@ -123,17 +126,23 @@ render_messages() {
     for ((i = 0; i < CONTENT_ROWS; ++i)); do
         tput cup $(($i))  0
         printf "\033[2K"  # clear the line
-        echo -n "${MESSAGE_BUFFER[MESSAGE_BUFFER_OFFSET + i + SCROLL]}"
+        #echo -n "${MESSAGE_BUFFER[MESSAGE_BUFFER_OFFSET + i + SCROLL]}"
+        printf '%s' "${MESSAGE_BUFFER[MESSAGE_BUFFER_OFFSET + i + SCROLL]}"
     done
     tput rc
     #tput cr
-    tput cup $((LINES - 1)) 2
+    #tput cup $((LINES - 1)) 2
     #tput cnorm
+}
+
+ssend_msg() {
+    local key="$1"; shift
+    echo "$@" | curl -s -d @- "${SERVER}/${key}" >/dev/null
 }
 
 send_msg() {
     local key="$1"; shift
-    echo "$@" | curl -s -d @- "${SERVER}/${key}" >/dev/null
+    echo "$@" >&$WRITE_FD
 }
 
 handle_resize() {
@@ -170,9 +179,9 @@ draw_input() {
     local cols=$(($COLS - 3))
     #tput civis
     tput cup $((ROWS - 1)) 0
-    printf "\033[2K"  # clear the line
+    #printf "\033[2K"  # clear the line
     local min=$(max 0 $(($pos - $cols)))
-    printf "> %s" "${text:$min:$cols}"
+    printf "\r%s\033[K" "> ${text:$min:$cols}"
     tput cup $((ROWS - 1)) $((pos + 2)) # real cursor is hidden here
     printf "\033[7m${text:$((pos)):1}\033[0m" # invert cursor
     if [[ $pos -ge ${#text} ]]; then
@@ -265,8 +274,8 @@ main() {
     tput clear
     tput civis
 
-    coproc ntfy_listen ( curl -s --no-buffer -N "${SERVER}/${key}/raw?since=720m" )
-    #coproc ntfy_listen  ( cat ) # for offline testing
+    #coproc ntfy_listen ( curl -s --no-buffer -N "${SERVER}/${key}/raw?since=720m" )
+    coproc ntfy_listen  ( cat ) # for offline testing
     CURL_PID=$ntfy_listen_PID
     exec {READ_FD}<&${ntfy_listen[0]}
     exec {WRITE_FD}<&${ntfy_listen[1]}
