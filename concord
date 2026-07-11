@@ -322,7 +322,7 @@ main() {
     username="${1}"
     key="${2:-0xDEADBEA7}"
     if [[ -z $username ]]; then
-        username="$(random_name)"
+        username="${ random_name; }"
     fi
 
     preflight
