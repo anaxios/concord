@@ -151,7 +151,7 @@ render_messages() {
     #tput civis
     local screen_buffer=()
     SCROLL=$(min 0 $SCROLL)
-    SCROLL=$(max $((-screen_buffer_OFFSET)) $SCROLL)
+    SCROLL=$(max $((-screen_buffer_offset)) $SCROLL)
     for ((i = 0; i < ${#MESSAGE_BUFFER[@]}; ++i)); do
         local first=0
         local last=${#MESSAGE_BUFFER[i]}
@@ -161,29 +161,29 @@ render_messages() {
         done
     done
 
-    local screen_buffer_LEN=${#screen_buffer[@]}
-    screen_buffer_OFFSET=$(max 0 $(( $screen_buffer_LEN - $CONTENT_ROWS )))
+    local screen_buffer_len=${#screen_buffer[@]}
+    screen_buffer_offset=$(max 0 $(( $screen_buffer_len - $CONTENT_ROWS )))
 
     # draw scrollbar
-    if [[ $SCROLL < 0 && $screen_buffer_LEN -gt $CONTENT_ROWS ]]; then
-        local bar=$(clamp 1 $CONTENT_ROWS $(( CONTENT_ROWS * CONTENT_ROWS / screen_buffer_LEN )))
+    if [[ $SCROLL < 0 && $screen_buffer_len -gt $CONTENT_ROWS ]]; then
+        local bar=$(clamp 1 $CONTENT_ROWS $(( CONTENT_ROWS * CONTENT_ROWS / screen_buffer_len )))
         local max_bar_offset=$(( CONTENT_ROWS - bar ))
-        local max_scroll=$(( screen_buffer_LEN - CONTENT_ROWS ))
+        local max_scroll=$(( screen_buffer_len - CONTENT_ROWS ))
         local bar_offset=$(( max_bar_offset * (max_scroll + SCROLL) / max_scroll ))
 
         for ((i = bar_offset + 1; i < bar_offset + bar + 2; ++i)); do
             #tput cup $((i)) $((COLS - 1))
             #printf "\033[7m \033[0m"
-            local tmp="${screen_buffer[i - 1 + screen_buffer_OFFSET + SCROLL]}"
-            screen_buffer[i - 1 + screen_buffer_OFFSET + SCROLL]="$(pad "${tmp}" $((COLS - 1)) )█"
+            local tmp="${screen_buffer[i - 1 + screen_buffer_offset + SCROLL]}"
+            screen_buffer[i - 1 + screen_buffer_offset + SCROLL]="$(pad "${tmp}" $((COLS - 1)) )█"
         done
     fi
 
     for ((i = 0; i < CONTENT_ROWS; ++i)); do
         tput cup $(($i))  0
         #printf "\r%s\033[2K"  # clear the line
-        #echo -n "${screen_buffer[screen_buffer_OFFSET + i + SCROLL]}"
-        printf '\r%s\033[K' "${screen_buffer[screen_buffer_OFFSET + i + SCROLL]}"
+        #echo -n "${screen_buffer[screen_buffer_offset + i + SCROLL]}"
+        printf '\r%s\033[K' "${screen_buffer[screen_buffer_offset + i + SCROLL]}"
     done
 
 
