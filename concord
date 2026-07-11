@@ -37,11 +37,18 @@ cleanup() {
 }
 
 preflight() {
-    #local requires=( curl )
+    local requires=( curl )
     if ! [[ "$BASH_VERSION" =~ ^5.+ ]]; then
         echo "Needs a newer version of Bash"
         exit 1
     fi
+
+    for cmd in "${requires[@]}"; do
+        if ! command -v "$cmd" >/dev/null; then
+            echo "requires $cmd to be installed"
+            exit 1
+        fi
+    done
 
     if ! [[ -p /tmp/EVENT_BUS ]]; then
         mkfifo /tmp/EVENT_BUS
