@@ -121,11 +121,37 @@ write() {
     echo "$@" >/dev/ttys002
 }
 
+pad() {
+    local string=$1; shift
+    local last=$1; shift
+    local first=$((${#string} - 1))
+    local tmp
+    while ((++first < last)); do
+        tmp+=" "
+    done
+    printf '%s' "${string}${tmp}"
+}
+
+clamp() {
+    local min=$1; shift
+    local max=$1; shift
+    local x=$1
+    if [[ $x -lt $min ]]; then
+        echo $min
+    elif [[ $x -gt $max ]]; then
+        echo $max
+    else
+        echo $x
+    fi
+}
+
 SCROLL=0
 render_messages() {
     tput sc
     #tput civis
     local screen_buffer=()
+    SCROLL=$(min 0 $SCROLL)
+    SCROLL=$(max $((-screen_buffer_OFFSET)) $SCROLL)
     for ((i = 0; i < ${#MESSAGE_BUFFER[@]}; ++i)); do
         local first=0
         local last=${#MESSAGE_BUFFER[i]}
@@ -134,20 +160,34 @@ render_messages() {
             first=$((first + COLS - 1))
         done
     done
+
     local screen_buffer_LEN=${#screen_buffer[@]}
-    SCROLL=$(min 0 $SCROLL)
-    SCROLL=$(max $((-screen_buffer_OFFSET)) $SCROLL)
     screen_buffer_OFFSET=$(max 0 $(( $screen_buffer_LEN - $CONTENT_ROWS )))
+
+    # draw scrollbar
+    if [[ $SCROLL < 0 && $screen_buffer_LEN -gt $CONTENT_ROWS ]]; then
+        local bar=$(clamp 1 $CONTENT_ROWS $(( CONTENT_ROWS * CONTENT_ROWS / screen_buffer_LEN )))
+        local max_bar_offset=$(( CONTENT_ROWS - bar ))
+        local max_scroll=$(( screen_buffer_LEN - CONTENT_ROWS ))
+        local bar_offset=$(( max_bar_offset * (max_scroll + SCROLL) / max_scroll ))
+
+        for ((i = bar_offset + 1; i < bar_offset + bar + 2; ++i)); do
+            #tput cup $((i)) $((COLS - 1))
+            #printf "\033[7m \033[0m"
+            local tmp="${screen_buffer[i - 1+ screen_buffer_OFFSET + SCROLL]}"
+            screen_buffer[i - 1 + screen_buffer_OFFSET + SCROLL]="$(pad "${tmp}" $((COLS - 1)) )█"
+        done
+    fi
+
     for ((i = 0; i < CONTENT_ROWS; ++i)); do
         tput cup $(($i))  0
         #printf "\r%s\033[2K"  # clear the line
         #echo -n "${screen_buffer[screen_buffer_OFFSET + i + SCROLL]}"
         printf '\r%s\033[K' "${screen_buffer[screen_buffer_OFFSET + i + SCROLL]}"
     done
+
+
     tput rc
-    #tput cr
-    #tput cup $((LINES - 1)) 2
-    #tput cnorm
 }
 
 send_msg() {
@@ -156,20 +196,11 @@ send_msg() {
     if [[ -z "$@" ]]; then
         return
     fi
-    if [[ -n $CAT ]]; then
+    if [[ -n $CONCORD_CAT ]]; then
         echo "$username $@" >&$WRITE_FD
         return
     fi
     echo "$username $@" | curl -s -d @- "${SERVER}/${key}" >/dev/null
-}
-
-ssend_msg() {
-    local key="$1"; shift
-    local username="$1"; shift
-    if [[ -z "$@" ]]; then
-        return
-    fi
-    echo "$username $@" >&$WRITE_FD
 }
 
 handle_resize() {
@@ -179,6 +210,7 @@ handle_resize() {
     #tput smcup
     #tput clear
     #printf "\033[1;${CONTENT_ROWS}r"  # reset scroll region
+    render_messages
     render_messages
     draw_input
     draw_input "$usr_input"
@@ -304,7 +336,7 @@ main() {
     tput clear
     tput civis
 
-    if [[ -n $CAT ]]; then
+    if [[ -n $CONCORD_CAT ]]; then
         coproc ntfy_listen  ( cat ) # for offline testing
     else
         coproc ntfy_listen ( curl -s --no-buffer -N "${SERVER}/${key}/raw?since=720m" )
