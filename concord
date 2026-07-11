@@ -156,6 +156,10 @@ send_msg() {
     if [[ -z "$@" ]]; then
         return
     fi
+    if [[ -n $CAT ]]; then
+        echo "$username $@" >&$WRITE_FD
+        return
+    fi
     echo "$username $@" | curl -s -d @- "${SERVER}/${key}" >/dev/null
 }
 
@@ -300,8 +304,11 @@ main() {
     tput clear
     tput civis
 
-    coproc ntfy_listen ( curl -s --no-buffer -N "${SERVER}/${key}/raw?since=720m" )
-    #coproc ntfy_listen  ( cat ) # for offline testing
+    if [[ -n $CAT ]]; then
+        coproc ntfy_listen  ( cat ) # for offline testing
+    else
+        coproc ntfy_listen ( curl -s --no-buffer -N "${SERVER}/${key}/raw?since=720m" )
+    fi
     CURL_PID=$ntfy_listen_PID
     exec {READ_FD}<&${ntfy_listen[0]}
     exec {WRITE_FD}<&${ntfy_listen[1]}
