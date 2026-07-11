@@ -150,8 +150,8 @@ render_messages() {
     tput sc
     #tput civis
     local screen_buffer=()
-    SCROLL=$(min 0 $SCROLL)
-    SCROLL=$(max $((-screen_buffer_offset)) $SCROLL)
+    SCROLL=${ min 0 $SCROLL; }
+    SCROLL=${ max $((-screen_buffer_offset)) $SCROLL; }
     for ((i = 0; i < ${#MESSAGE_BUFFER[@]}; ++i)); do
         local first=0
         local last=${#MESSAGE_BUFFER[i]}
@@ -162,11 +162,11 @@ render_messages() {
     done
 
     local screen_buffer_len=${#screen_buffer[@]}
-    screen_buffer_offset=$(max 0 $(( $screen_buffer_len - $CONTENT_ROWS )))
+    screen_buffer_offset=${ max 0 $(( $screen_buffer_len - $CONTENT_ROWS )); }
 
     # draw scrollbar
     if [[ $SCROLL < 0 && $screen_buffer_len -gt $CONTENT_ROWS ]]; then
-        local bar=$(clamp 1 $CONTENT_ROWS $(( CONTENT_ROWS * CONTENT_ROWS / screen_buffer_len )))
+        local bar=${ clamp 1 $CONTENT_ROWS $(( CONTENT_ROWS * CONTENT_ROWS / screen_buffer_len )); }
         local max_bar_offset=$(( CONTENT_ROWS - bar ))
         local max_scroll=$(( screen_buffer_len - CONTENT_ROWS ))
         local bar_offset=$(( max_bar_offset * (max_scroll + SCROLL) / max_scroll ))
@@ -175,7 +175,7 @@ render_messages() {
             #tput cup $((i)) $((COLS - 1))
             #printf "\033[7m \033[0m"
             local tmp="${screen_buffer[i - 1 + screen_buffer_offset + SCROLL]}"
-            screen_buffer[i - 1 + screen_buffer_offset + SCROLL]="$(pad "${tmp}" $((COLS - 1)) )█"
+            screen_buffer[i - 1 + screen_buffer_offset + SCROLL]="${ pad "${tmp}" $((COLS - 1)); }█"
         done
     fi
 
@@ -355,6 +355,7 @@ main() {
     draw_input
 
     local event
+    local usr_input
     local _discard cur_pos e
     while : ; do
         while read -r event; do
