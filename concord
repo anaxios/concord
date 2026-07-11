@@ -174,7 +174,7 @@ render_messages() {
         for ((i = bar_offset + 1; i < bar_offset + bar + 2; ++i)); do
             #tput cup $((i)) $((COLS - 1))
             #printf "\033[7m \033[0m"
-            local tmp="${screen_buffer[i - 1+ screen_buffer_OFFSET + SCROLL]}"
+            local tmp="${screen_buffer[i - 1 + screen_buffer_OFFSET + SCROLL]}"
             screen_buffer[i - 1 + screen_buffer_OFFSET + SCROLL]="$(pad "${tmp}" $((COLS - 1)) )█"
         done
     fi
