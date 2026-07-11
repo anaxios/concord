@@ -38,8 +38,8 @@ cleanup() {
 
 preflight() {
     local requires=( curl )
-    if ! [[ "$BASH_VERSION" =~ ^5.+ ]]; then
-        echo "Needs a newer version of Bash"
+    if ! [[ "$BASH_VERSION" =~ ^5.3+ ]]; then
+        echo "Requires Bash verison 5.3+"
         exit 1
     fi
 
